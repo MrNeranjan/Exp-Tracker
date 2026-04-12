@@ -1,8 +1,9 @@
 import { MonthlyBreakdownCard, type CategoryBreakdown } from '@/components/home/monthly-breakdown-card';
 import { MonthlySummaryCard } from '@/components/home/monthly-summary-card';
 import { RecentExpensesCard, type ExpenseItem } from '@/components/home/recent-expenses-card';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { FloatingAddButton } from '@/components/ui/floating-add-button';
+import { Reveal } from '@/components/ui/reveal';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const monthlyBudget = 3500;
@@ -47,22 +48,26 @@ export default function HomeTabScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <MonthlySummaryCard totalSpent={totalSpent} monthlyBudget={monthlyBudget} />
+        <Reveal delay={40}>
+          <MonthlySummaryCard totalSpent={totalSpent} monthlyBudget={monthlyBudget} />
+        </Reveal>
 
-        <Text style={styles.sectionTitle}>Breakdown</Text>
-        <MonthlyBreakdownCard categories={categoryData} />
+        <Reveal delay={110}>
+          <Text style={styles.sectionTitle}>Breakdown</Text>
+        </Reveal>
+        <Reveal delay={150}>
+          <MonthlyBreakdownCard categories={categoryData} />
+        </Reveal>
 
-        <Text style={styles.sectionTitle}>Recent Expenses</Text>
-        <RecentExpensesCard expenses={recentExpenses} />
+        <Reveal delay={220}>
+          <Text style={styles.sectionTitle}>Recent Expenses</Text>
+        </Reveal>
+        <Reveal delay={260}>
+          <RecentExpensesCard expenses={recentExpenses} />
+        </Reveal>
       </ScrollView>
 
-      <Pressable
-        style={styles.quickActionButton}
-        accessibilityRole="button"
-        accessibilityLabel="Add expense entry"
-        onPress={() => {}}>
-        <Ionicons name="add" size={38} color="#FFFFFF" />
-      </Pressable>
+      <FloatingAddButton onPress={() => {}} delay={320} />
     </SafeAreaView>
   );
 }
@@ -84,21 +89,5 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '700',
     marginTop: 4,
-  },
-  quickActionButton: {
-    position: 'absolute',
-    right: 18,
-    bottom: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2FC95E',
-    shadowColor: '#2FC95E',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 9,
   },
 });

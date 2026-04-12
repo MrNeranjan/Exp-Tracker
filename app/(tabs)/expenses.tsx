@@ -1,6 +1,7 @@
 import { ExpenseItem, ExpenseItemCard } from '@/components/expense/expense-item-card';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FloatingAddButton } from '@/components/ui/floating-add-button';
+import { Reveal } from '@/components/ui/reveal';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type ExpenseGroup = {
@@ -107,10 +108,12 @@ export default function ExpensesTabScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Expenses</Text>
+        <Reveal delay={30}>
+          <Text style={styles.pageTitle}>Expenses</Text>
+        </Reveal>
 
-        {expenseGroups.map((group) => (
-          <View key={group.monthLabel}>
+        {expenseGroups.map((group, groupIndex) => (
+          <Reveal key={group.monthLabel} delay={90 + groupIndex * 90}>
             <Text style={styles.groupTitle}>{group.monthLabel}</Text>
             <View style={styles.groupCard}>
               {group.entries.map((expense, index) => (
@@ -121,17 +124,11 @@ export default function ExpensesTabScreen() {
                 />
               ))}
             </View>
-          </View>
+          </Reveal>
         ))}
       </ScrollView>
 
-      <Pressable
-        style={styles.quickActionButton}
-        accessibilityRole="button"
-        accessibilityLabel="Add expense entry"
-        onPress={() => {}}>
-        <Ionicons name="add" size={38} color="#FFFFFF" />
-      </Pressable>
+      <FloatingAddButton onPress={() => {}} delay={280} />
     </SafeAreaView>
   );
 }
@@ -171,21 +168,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
-  },
-  quickActionButton: {
-    position: 'absolute',
-    right: 18,
-    bottom: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2FC95E',
-    shadowColor: '#2FC95E',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 9,
   },
 });

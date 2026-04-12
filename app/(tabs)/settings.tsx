@@ -1,3 +1,4 @@
+import { Reveal } from '@/components/ui/reveal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -36,9 +37,12 @@ export default function SettingsTabScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Settings</Text>
+        <Reveal delay={30}>
+          <Text style={styles.pageTitle}>Settings</Text>
+        </Reveal>
 
-        <View style={styles.card}>
+        <Reveal delay={90}>
+          <View style={styles.card}>
           <Text style={styles.cardTitle}>Google Sheet Integration</Text>
 
           <Text style={styles.fieldLabel}>Sheet API Endpoint (URL)</Text>
@@ -61,9 +65,11 @@ export default function SettingsTabScreen() {
               <Text style={styles.primaryButtonText}>Sync Google Sheet</Text>
             </LinearGradient>
           </Pressable>
-        </View>
+          </View>
+        </Reveal>
 
-        <View style={styles.card}>
+        <Reveal delay={160}>
+          <View style={styles.card}>
           <Text style={styles.cardTitle}>Budget Configuration</Text>
 
           <Text style={styles.fieldLabel}>Set Monthly Budget</Text>
@@ -97,7 +103,8 @@ export default function SettingsTabScreen() {
               <Text style={styles.primaryButtonText}>Save Budget</Text>
             </LinearGradient>
           </Pressable>
-        </View>
+          </View>
+        </Reveal>
       </ScrollView>
     </SafeAreaView>
   );
