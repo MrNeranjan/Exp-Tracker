@@ -8,6 +8,8 @@ export type ExpenseItem = {
   category: string;
   time: string;
   icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  categoryColor?: string;
 };
 
 type ExpenseItemCardProps = {
@@ -26,7 +28,12 @@ export function ExpenseItemCard({ expense, showDivider = false }: ExpenseItemCar
   return (
     <View style={[styles.expenseRow, showDivider && styles.rowDivider]}>
       <View style={styles.expenseLeft}>
-        <Ionicons name={expense.icon} size={22} color="#111827" style={styles.expenseIcon} />
+        <Ionicons
+          name={expense.icon}
+          size={22}
+          color={expense.iconColor ?? '#111827'}
+          style={styles.expenseIcon}
+        />
         <View>
           <Text style={styles.expenseMerchant}>{expense.merchant}</Text>
           <Text style={styles.expenseMeta}>{expense.time}</Text>
@@ -35,7 +42,9 @@ export function ExpenseItemCard({ expense, showDivider = false }: ExpenseItemCar
 
       <View style={styles.expenseRight}>
         <Text style={styles.expenseAmount}>-{formatMoney(expense.amount)}</Text>
-        <Text style={styles.expenseMeta}>{expense.category}</Text>
+        <Text style={[styles.expenseMeta, expense.categoryColor && { color: expense.categoryColor }]}>
+          {expense.category}
+        </Text>
       </View>
     </View>
   );
