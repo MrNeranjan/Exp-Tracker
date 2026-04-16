@@ -1,9 +1,18 @@
+import { ExpenseItem, ExpenseItemCard } from '@/components/expense/expense-item-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type LedgerType = 'i-gave' | 'i-owe';
@@ -60,6 +69,16 @@ export default function GiveTabScreen() {
   const params = useLocalSearchParams<{ newLiability?: string }>();
   const handledPayload = useRef<string | null>(null);
   const [entries, setEntries] = useState(initialEntries);
+  const [editingEntry, setEditingEntry] = useState<LiabilityEntry | null>(null);
+  const [editPerson, setEditPerson] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editType, setEditType] = useState<LedgerType>('i-gave');
+  const [editNote, setEditNote] = useState('');
+
+  const isEditValid = useMemo(() => {
+    const parsedAmount = Number(editAmount.replace(/,/g, ''));
+    return Number.isFinite(parsedAmount) && parsedAmount > 0 && editPerson.trim().length > 0;
+  }, [editAmount, editPerson]);
 
   const handleDeleteRecord = (entry: LiabilityEntry) => {
     Alert.alert('Remove this record?', 'Use this when the give/take is settled.', [
@@ -72,6 +91,41 @@ export default function GiveTabScreen() {
         },
       },
     ]);
+  };
+
+  const handleOpenEdit = (entry: LiabilityEntry) => {
+    setEditingEntry(entry);
+    setEditPerson(entry.person);
+    setEditAmount(String(entry.amount));
+    setEditType(entry.type);
+    setEditNote(entry.note ?? '');
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingEntry) {
+      return;
+    }
+
+    const parsedAmount = Number(editAmount.replace(/,/g, ''));
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !editPerson.trim()) {
+      return;
+    }
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === editingEntry.id
+          ? {
+              ...entry,
+              person: editPerson.trim(),
+              amount: parsedAmount,
+              type: editType,
+              note: editNote.trim() || undefined,
+            }
+          : entry
+      )
+    );
+
+    setEditingEntry(null);
   };
 
   useEffect(() => {
@@ -112,6 +166,45 @@ export default function GiveTabScreen() {
     return { receivable, payable, net: receivable - payable };
   }, [entries]);
 
+  const expenseLikeRecords: ExpenseItem[] = useMemo(
+    () =>
+      entries.map((entry) => {
+        const isReceivable = entry.type === 'i-gave';
+
+        return {
+          id: entry.id,
+          merchant: entry.person,
+          amount: entry.amount,
+          category: isReceivable ? 'Receivable' : 'Payable',
+          time: entry.dateLabel,
+          note: entry.note,
+          createdAt: entry.createdAt,
+          icon: isReceivable ? 'arrow-down-circle' : 'arrow-up-circle',
+          iconColor: isReceivable ? '#0F9D58' : '#DC2626',
+          categoryColor: isReceivable ? '#0F9D58' : '#DC2626',
+        };
+      }),
+    [entries]
+  );
+
+  const handleEditFromCard = (record: ExpenseItem) => {
+    const target = entries.find((entry) => entry.id === record.id);
+    if (!target) {
+      return;
+    }
+
+    handleOpenEdit(target);
+  };
+
+  const handleDeleteFromCard = (record: ExpenseItem) => {
+    const target = entries.find((entry) => entry.id === record.id);
+    if (!target) {
+      return;
+    }
+
+    handleDeleteRecord(target);
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -145,47 +238,99 @@ export default function GiveTabScreen() {
           <Text style={styles.sectionTitle}>Recent Records</Text>
         </Reveal>
 
-        {entries.map((entry, index) => {
-          const isReceivable = entry.type === 'i-gave';
-
-          return (
-            <Reveal key={entry.id} delay={240 + index * 50}>
-              <View style={styles.entryCard}>
-                <View style={styles.entryTopRow}>
-                  <View style={styles.personWrap}>
-                    <Ionicons
-                      name={isReceivable ? 'arrow-down-circle' : 'arrow-up-circle'}
-                      size={20}
-                      color={isReceivable ? '#0F9D58' : '#DC2626'}
-                    />
-                    <Text style={styles.personName}>{entry.person}</Text>
-                  </View>
-                  <View style={styles.amountActionWrap}>
-                    <Text
-                      style={[styles.entryAmount, isReceivable ? styles.incomeAmount : styles.outgoingAmount]}>
-                      {isReceivable ? '+' : '-'}{formatMoney(entry.amount)}
-                    </Text>
-                    <Pressable
-                      style={styles.deleteButton}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove record for ${entry.person}`}
-                      onPress={() => handleDeleteRecord(entry)}>
-                      <Ionicons name="trash-outline" size={15} color="#B91C1C" />
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.entryMetaRow}>
-                  <Text style={styles.entryMeta}>{entry.dateLabel}</Text>
-                  <Text style={styles.entryMeta}>{isReceivable ? 'Receivable' : 'Payable'}</Text>
-                </View>
-
-                {entry.note ? <Text style={styles.noteText}>{entry.note}</Text> : null}
-              </View>
-            </Reveal>
-          );
-        })}
+        <Reveal delay={240}>
+          <View style={styles.groupCard}>
+            {expenseLikeRecords.map((record, index) => (
+              <ExpenseItemCard
+                key={record.id}
+                expense={record}
+                showDivider={index < expenseLikeRecords.length - 1}
+                showActions
+                onEdit={handleEditFromCard}
+                onDelete={handleDeleteFromCard}
+              />
+            ))}
+          </View>
+        </Reveal>
       </ScrollView>
+
+      <Modal
+        visible={!!editingEntry}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingEntry(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Give/Take Record</Text>
+
+            <ScrollView
+              style={styles.modalBody}
+              contentContainerStyle={styles.modalBodyContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalLabel}>Person / Reference</Text>
+              <TextInput
+                value={editPerson}
+                onChangeText={setEditPerson}
+                style={styles.modalInput}
+                placeholder="Name or source"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={styles.modalLabel}>Amount</Text>
+              <TextInput
+                value={editAmount}
+                onChangeText={setEditAmount}
+                keyboardType="decimal-pad"
+                style={styles.modalInput}
+                placeholder="0.00"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={styles.modalLabel}>Type</Text>
+              <View style={styles.typeRow}>
+                <Pressable
+                  style={[styles.typeButton, editType === 'i-gave' && styles.typeButtonActiveGreen]}
+                  onPress={() => setEditType('i-gave')}>
+                  <Text style={[styles.typeButtonText, editType === 'i-gave' && styles.typeButtonTextActiveGreen]}>
+                    Receivable
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.typeButton, editType === 'i-owe' && styles.typeButtonActiveRed]}
+                  onPress={() => setEditType('i-owe')}>
+                  <Text style={[styles.typeButtonText, editType === 'i-owe' && styles.typeButtonTextActiveRed]}>
+                    Payable
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Text style={styles.modalLabel}>Note (Optional)</Text>
+              <TextInput
+                value={editNote}
+                onChangeText={setEditNote}
+                style={[styles.modalInput, styles.modalNoteInput]}
+                placeholder="Reason or context"
+                placeholderTextColor="#94A3B8"
+                multiline
+                textAlignVertical="top"
+              />
+            </ScrollView>
+
+            <View style={styles.modalActionsRow}>
+              <Pressable style={styles.modalCancelButton} onPress={() => setEditingEntry(null)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveButton, !isEditValid && styles.modalSaveButtonDisabled]}
+                onPress={handleSaveEdit}
+                disabled={!isEditValid}>
+                <Text style={styles.modalSaveText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <FloatingAddButton onPress={() => router.push('../add-liability')} delay={280} />
     </SafeAreaView>
@@ -274,67 +419,140 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
-  entryCard: {
+  groupCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  entryTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  personWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  modalBackdrop: {
     flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.35)',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
   },
-  personName: {
-    fontSize: 16,
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 8,
+    width: '100%',
+    maxHeight: '88%',
+    overflow: 'hidden',
+  },
+  modalBody: {
+    maxHeight: 420,
+  },
+  modalBodyContent: {
+    gap: 8,
+    paddingBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
     color: '#0F172A',
+    marginBottom: 4,
+  },
+  modalLabel: {
+    fontSize: 13,
+    color: '#334155',
     fontWeight: '600',
   },
-  entryAmount: {
-    fontSize: 16,
-    fontWeight: '700',
+  modalInput: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    color: '#0F172A',
+    fontSize: 15,
+    backgroundColor: '#FFFFFF',
   },
-  amountActionWrap: {
+  modalNoteInput: {
+    height: 96,
+    minHeight: 86,
+    paddingTop: 10,
+  },
+  typeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  incomeAmount: {
-    color: '#0F9D58',
+  typeButton: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  outgoingAmount: {
-    color: '#DC2626',
+  typeButtonActiveGreen: {
+    backgroundColor: '#ECFDF3',
+    borderColor: '#22C55E',
   },
-  deleteButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  typeButtonActiveRed: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  typeButtonTextActiveGreen: {
+    color: '#15803D',
+  },
+  typeButtonTextActiveRed: {
+    color: '#B91C1C',
+  },
+  modalActionsRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 10,
+  },
+  modalCancelButton: {
+    minWidth: 86,
+    height: 42,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    backgroundColor: '#FFFFFF',
   },
-  entryMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  modalSaveButton: {
+    minWidth: 86,
+    height: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1D4ED8',
   },
-  entryMeta: {
-    fontSize: 12,
-    color: '#64748B',
+  modalSaveButtonDisabled: {
+    opacity: 0.5,
   },
-  noteText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#475569',
+  modalCancelText: {
+    color: '#0F172A',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  modalSaveText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

@@ -8,6 +8,7 @@ export type ExpenseItem = {
   amount: number;
   category: string;
   time: string;
+  note?: string;
   createdAt?: string;
   icon: keyof typeof Ionicons.glyphMap;
   iconColor?: string;
@@ -71,6 +72,7 @@ export function ExpenseItemCard({
         <View>
           <Text style={styles.expenseMerchant}>{expense.merchant}</Text>
           <Text style={styles.expenseMeta}>{expense.time}</Text>
+          {expense.note ? <Text style={styles.expenseNote}>{expense.note}</Text> : null}
         </View>
       </View>
 
@@ -166,6 +168,12 @@ const styles = StyleSheet.create({
   expenseMeta: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  expenseNote: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+    maxWidth: 190,
   },
   actionsWrap: {
     position: 'relative',
