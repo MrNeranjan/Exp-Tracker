@@ -3,32 +3,18 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const baseCategories = [
-  'Food & Dining',
-  'Housing & Utilities',
-  'Transportation',
-  'Tech & Development',
-  'Education & Academic',
-  'Health & Wellness',
-  'Family & Support',
-  'Entertainment',
-  'Shopping',
-  'Personal Care',
-  'Gifts & Donations',
-  'Debt & Savings',
-  'Others',
-];
+type LiabilityType = 'i-gave' | 'i-owe';
 
 const formatDateLabel = (value: Date) =>
   value.toLocaleDateString('en-US', {
@@ -37,35 +23,21 @@ const formatDateLabel = (value: Date) =>
     year: 'numeric',
   });
 
-const formatExpenseTimestamp = (value: Date) => {
-  const date = value.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-  });
-  const time = value.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  return `${date}, ${time}`;
-};
-
-export default function AddExpenseScreen() {
+export default function AddLiabilityScreen() {
   const router = useRouter();
 
   const [amount, setAmount] = useState('');
+  const [person, setPerson] = useState('');
   const [note, setNote] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(baseCategories[0]);
-  const [categories, setCategories] = useState(baseCategories);
-  const [showAddCategoryInput, setShowAddCategoryInput] = useState(false);
-  const [newCategory, setNewCategory] = useState('');
   const [date, setDate] = useState(new Date());
+  const [type, setType] = useState<LiabilityType>('i-gave');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canSave = useMemo(() => {
     const parsedAmount = Number(amount.replace(/,/g, ''));
-    return Number.isFinite(parsedAmount) && parsedAmount > 0 && selectedCategory.length > 0;
-  }, [amount, selectedCategory]);
+    return Number.isFinite(parsedAmount) && parsedAmount > 0 && person.trim().length > 0;
+  }, [amount, person]);
 
   const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -76,25 +48,6 @@ export default function AddExpenseScreen() {
     }
   };
 
-  const handleAddCategory = () => {
-    const normalized = newCategory.trim();
-    if (!normalized) {
-      return;
-    }
-
-    const alreadyExists = categories.some(
-      (category) => category.toLowerCase() === normalized.toLowerCase()
-    );
-
-    if (!alreadyExists) {
-      setCategories((prev) => [...prev, normalized]);
-    }
-
-    setSelectedCategory(normalized);
-    setNewCategory('');
-    setShowAddCategoryInput(false);
-  };
-
   const handleSave = () => {
     const parsedAmount = Number(amount.replace(/,/g, ''));
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -102,21 +55,26 @@ export default function AddExpenseScreen() {
       return;
     }
 
+    if (!person.trim()) {
+      setSubmitError('Please add a person or reference name.');
+      return;
+    }
+
     const payload = {
-      id: `custom-${Date.now()}`,
-      merchant: note.trim() || selectedCategory,
+      id: `liability-${Date.now()}`,
+      person: person.trim(),
       amount: parsedAmount,
-      category: selectedCategory,
-      time: formatExpenseTimestamp(date),
+      type,
+      dateLabel: formatDateLabel(date),
+      note: note.trim() || undefined,
       createdAt: date.toISOString(),
-      icon: 'receipt-outline' as const,
     };
 
     setSubmitError(null);
     router.replace({
-      pathname: '/(tabs)',
+      pathname: '/(tabs)/give',
       params: {
-        newExpense: encodeURIComponent(JSON.stringify(payload)),
+        newLiability: encodeURIComponent(JSON.stringify(payload)),
       },
     });
   };
@@ -130,11 +88,31 @@ export default function AddExpenseScreen() {
           <Pressable style={styles.closeButton} onPress={() => router.back()}>
             <Ionicons name="close" size={22} color="#0F172A" />
           </Pressable>
-          <Text style={styles.headerTitle}>Add Expense</Text>
+          <Text style={styles.headerTitle}>Add Give/Take</Text>
           <View style={styles.closeButton} />
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Type</Text>
+            <View style={styles.typeRow}>
+              <Pressable
+                style={[styles.typeButton, type === 'i-gave' && styles.typeButtonActiveGreen]}
+                onPress={() => setType('i-gave')}>
+                <Text style={[styles.typeButtonText, type === 'i-gave' && styles.typeButtonTextActiveGreen]}>
+                  I gave money
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.typeButton, type === 'i-owe' && styles.typeButtonActiveRed]}
+                onPress={() => setType('i-owe')}>
+                <Text style={[styles.typeButtonText, type === 'i-owe' && styles.typeButtonTextActiveRed]}>
+                  I need to pay
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Amount</Text>
             <TextInput
@@ -150,44 +128,14 @@ export default function AddExpenseScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Type / Category</Text>
-            <View style={styles.categoryGrid}>
-              {categories.map((category) => {
-                const isSelected = category === selectedCategory;
-                return (
-                  <Pressable
-                    key={category}
-                    style={[styles.categoryChip, isSelected && styles.categoryChipSelected]}
-                    onPress={() => setSelectedCategory(category)}>
-                    <Text
-                      style={[styles.categoryChipText, isSelected && styles.categoryChipTextSelected]}>
-                      {category}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-
-              <Pressable
-                style={[styles.categoryChip, styles.addCategoryChip]}
-                onPress={() => setShowAddCategoryInput((prev) => !prev)}>
-                <Text style={styles.addCategoryChipText}>+ Add New Type</Text>
-              </Pressable>
-            </View>
-
-            {showAddCategoryInput && (
-              <View style={styles.newCategoryRow}>
-                <TextInput
-                  style={styles.newCategoryInput}
-                  placeholder="New category"
-                  placeholderTextColor="#94A3B8"
-                  value={newCategory}
-                  onChangeText={setNewCategory}
-                />
-                <Pressable style={styles.newCategorySaveButton} onPress={handleAddCategory}>
-                  <Text style={styles.newCategorySaveText}>Add</Text>
-                </Pressable>
-              </View>
-            )}
+            <Text style={styles.label}>Person / Reference</Text>
+            <TextInput
+              style={styles.input}
+              value={person}
+              onChangeText={setPerson}
+              placeholder="Name or source"
+              placeholderTextColor="#94A3B8"
+            />
           </View>
 
           <View style={styles.fieldGroup}>
@@ -208,12 +156,12 @@ export default function AddExpenseScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Reason / Note (Optional)</Text>
+            <Text style={styles.label}>Note (Optional)</Text>
             <TextInput
               style={styles.noteInput}
               value={note}
               onChangeText={setNote}
-              placeholder="Coffee with client, groceries, utility bill..."
+              placeholder="Reason or context"
               placeholderTextColor="#94A3B8"
               multiline
               numberOfLines={3}
@@ -282,6 +230,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  typeButtonActiveGreen: {
+    backgroundColor: '#ECFDF3',
+    borderColor: '#22C55E',
+  },
+  typeButtonActiveRed: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#EF4444',
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  typeButtonTextActiveGreen: {
+    color: '#15803D',
+  },
+  typeButtonTextActiveRed: {
+    color: '#B91C1C',
+  },
   amountInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -293,72 +273,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  categoryChipSelected: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#1D4ED8',
-  },
-  categoryChipText: {
-    fontSize: 13,
-    lineHeight: 17,
-    color: '#1E293B',
-    fontWeight: '500',
-  },
-  categoryChipTextSelected: {
-    color: '#1E40AF',
-    fontWeight: '700',
-  },
-  addCategoryChip: {
-    borderColor: '#1D4ED8',
-    borderStyle: 'dashed',
-  },
-  addCategoryChipText: {
-    fontSize: 13,
-    lineHeight: 17,
-    color: '#1D4ED8',
-    fontWeight: '600',
-  },
-  newCategoryRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 2,
-  },
-  newCategoryInput: {
-    flex: 1,
-    height: 44,
-    borderRadius: 10,
+  input: {
+    height: 48,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     fontSize: 15,
     color: '#0F172A',
-  },
-  newCategorySaveButton: {
-    height: 44,
-    minWidth: 70,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1D4ED8',
-    paddingHorizontal: 14,
-  },
-  newCategorySaveText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
   },
   dateButton: {
     height: 50,

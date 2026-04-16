@@ -1,6 +1,7 @@
+import type { ExpenseItem } from '@/components/expense/expense-item-card';
 import { MonthlyBreakdownCard, type CategoryBreakdown } from '@/components/home/monthly-breakdown-card';
 import { MonthlySummaryCard } from '@/components/home/monthly-summary-card';
-import { RecentExpensesCard, type ExpenseItem } from '@/components/home/recent-expenses-card';
+import { RecentGiveTakeCard, type GiveTakeRecord } from '@/components/home/recent-give-take-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,30 +20,27 @@ const categoryData: CategoryBreakdown[] = [
   { label: 'Others', percent: 6, amount: 142, color: '#8A96AC' },
 ];
 
-const recentExpenses: ExpenseItem[] = [
+const recentGiveTakeRecords: GiveTakeRecord[] = [
   {
     id: '1',
-    merchant: 'Whole Foods Market',
-    amount: 145.3,
-    category: 'Food',
-    time: 'Oct 28, 4:15 PM',
-    icon: 'cart',
+    person: 'Nimal Perera',
+    amount: 5000,
+    type: 'receivable',
+    dateLabel: 'Apr 16, 2026',
   },
   {
     id: '2',
-    merchant: 'Uber Ride',
-    amount: 24.5,
-    category: 'Travel',
-    time: 'Oct 25, 4:15 PM',
-    icon: 'car',
+    person: 'Book Store',
+    amount: 2450,
+    type: 'payable',
+    dateLabel: 'Apr 11, 2026',
   },
   {
     id: '3',
-    merchant: 'Shell Gas Station',
-    amount: 20,
-    category: 'Fuel',
-    time: 'Oct 25, 4:15 PM',
-    icon: 'flame',
+    person: 'Kasun Silva',
+    amount: 1200,
+    type: 'receivable',
+    dateLabel: 'Apr 10, 2026',
   },
 ];
 
@@ -52,7 +50,6 @@ export default function HomeTabScreen() {
   const handledPayload = useRef<string | null>(null);
 
   const [totalSpentValue, setTotalSpentValue] = useState(totalSpent);
-  const [recentExpensesState, setRecentExpensesState] = useState(recentExpenses);
 
   useEffect(() => {
     const payloadParam = Array.isArray(params.newExpense) ? params.newExpense[0] : params.newExpense;
@@ -63,12 +60,6 @@ export default function HomeTabScreen() {
 
     try {
       const parsedExpense = JSON.parse(decodeURIComponent(payloadParam)) as ExpenseItem;
-      setRecentExpensesState((prev) => {
-        if (prev.some((item) => item.id === parsedExpense.id)) {
-          return prev;
-        }
-        return [parsedExpense, ...prev].slice(0, 6);
-      });
       setTotalSpentValue((prev) => prev + parsedExpense.amount);
       handledPayload.current = payloadParam;
     } catch {
@@ -91,10 +82,10 @@ export default function HomeTabScreen() {
         </Reveal>
 
         <Reveal delay={220}>
-          <Text style={styles.sectionTitle}>Recent Expenses</Text>
+          <Text style={styles.sectionTitle}>Recent Give/Take Records</Text>
         </Reveal>
         <Reveal delay={260}>
-          <RecentExpensesCard expenses={recentExpensesState} />
+          <RecentGiveTakeCard records={recentGiveTakeRecords} />
         </Reveal>
       </ScrollView>
 
