@@ -1,6 +1,7 @@
 import { ExpenseItem, ExpenseItemCard } from '@/components/expense/expense-item-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
+import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -105,6 +106,8 @@ const expenseGroups: ExpenseGroup[] = [
 ];
 
 export default function ExpensesTabScreen() {
+  const router = useRouter();
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -128,7 +131,7 @@ export default function ExpensesTabScreen() {
         ))}
       </ScrollView>
 
-      <FloatingAddButton onPress={() => {}} delay={280} />
+      <FloatingAddButton onPress={() => router.push('../add-expense')} delay={280} />
     </SafeAreaView>
   );
 }

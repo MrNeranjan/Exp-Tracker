@@ -3,6 +3,8 @@ import { MonthlySummaryCard } from '@/components/home/monthly-summary-card';
 import { RecentExpensesCard, type ExpenseItem } from '@/components/home/recent-expenses-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -45,11 +47,40 @@ const recentExpenses: ExpenseItem[] = [
 ];
 
 export default function HomeTabScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ newExpense?: string }>();
+  const handledPayload = useRef<string | null>(null);
+
+  const [totalSpentValue, setTotalSpentValue] = useState(totalSpent);
+  const [recentExpensesState, setRecentExpensesState] = useState(recentExpenses);
+
+  useEffect(() => {
+    const payloadParam = Array.isArray(params.newExpense) ? params.newExpense[0] : params.newExpense;
+
+    if (!payloadParam || handledPayload.current === payloadParam) {
+      return;
+    }
+
+    try {
+      const parsedExpense = JSON.parse(decodeURIComponent(payloadParam)) as ExpenseItem;
+      setRecentExpensesState((prev) => {
+        if (prev.some((item) => item.id === parsedExpense.id)) {
+          return prev;
+        }
+        return [parsedExpense, ...prev].slice(0, 6);
+      });
+      setTotalSpentValue((prev) => prev + parsedExpense.amount);
+      handledPayload.current = payloadParam;
+    } catch {
+      handledPayload.current = payloadParam;
+    }
+  }, [params.newExpense]);
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Reveal delay={40}>
-          <MonthlySummaryCard totalSpent={totalSpent} monthlyBudget={monthlyBudget} />
+          <MonthlySummaryCard totalSpent={totalSpentValue} monthlyBudget={monthlyBudget} />
         </Reveal>
 
         <Reveal delay={110}>
@@ -63,11 +94,11 @@ export default function HomeTabScreen() {
           <Text style={styles.sectionTitle}>Recent Expenses</Text>
         </Reveal>
         <Reveal delay={260}>
-          <RecentExpensesCard expenses={recentExpenses} />
+          <RecentExpensesCard expenses={recentExpensesState} />
         </Reveal>
       </ScrollView>
 
-      <FloatingAddButton onPress={() => {}} delay={320} />
+      <FloatingAddButton onPress={() => router.push('../add-expense')} delay={320} />
     </SafeAreaView>
   );
 }
