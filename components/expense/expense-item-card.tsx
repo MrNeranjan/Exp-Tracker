@@ -6,6 +6,7 @@ export type ExpenseItem = {
   id: string;
   merchant: string;
   amount: number;
+  amountPrefix?: '+' | '-';
   category: string;
   time: string;
   note?: string;
@@ -20,6 +21,9 @@ type ExpenseItemCardProps = {
   showDivider?: boolean;
   showActions?: boolean;
   enforceSameDayActions?: boolean;
+  isMenuOpen?: boolean;
+  onToggleMenu?: (expense: ExpenseItem) => void;
+  onCloseMenu?: () => void;
   onEdit?: (expense: ExpenseItem) => void;
   onDelete?: (expense: ExpenseItem) => void;
 };
@@ -54,11 +58,33 @@ export function ExpenseItemCard({
   showDivider = false,
   showActions = false,
   enforceSameDayActions = false,
+  isMenuOpen,
+  onToggleMenu,
+  onCloseMenu,
   onEdit,
   onDelete,
 }: ExpenseItemCardProps) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [localIsMenuOpen, setLocalIsMenuOpen] = useState(false);
+  const resolvedIsMenuOpen = isMenuOpen ?? localIsMenuOpen;
   const canManage = !enforceSameDayActions || isSameLocalDay(expense.createdAt);
+
+  const toggleMenu = () => {
+    if (onToggleMenu) {
+      onToggleMenu(expense);
+      return;
+    }
+
+    setLocalIsMenuOpen((prev) => !prev);
+  };
+
+  const closeMenu = () => {
+    if (onCloseMenu) {
+      onCloseMenu();
+      return;
+    }
+
+    setLocalIsMenuOpen(false);
+  };
 
   return (
     <View style={[styles.expenseRow, showDivider && styles.rowDivider]}>
@@ -78,7 +104,7 @@ export function ExpenseItemCard({
 
       <View style={styles.expenseRightSection}>
         <View style={styles.expenseRight}>
-          <Text style={styles.expenseAmount}>-{formatMoney(expense.amount)}</Text>
+          <Text style={styles.expenseAmount}>{expense.amountPrefix ?? '-'}{formatMoney(expense.amount)}</Text>
           <Text style={[styles.expenseMeta, expense.categoryColor && { color: expense.categoryColor }]}>
             {expense.category}
           </Text>
@@ -89,18 +115,18 @@ export function ExpenseItemCard({
             <Pressable
               style={styles.moreButton}
               hitSlop={8}
-              onPress={() => setIsMenuOpen((prev) => !prev)}>
+              onPress={toggleMenu}>
               <Ionicons name="ellipsis-vertical" size={16} color="#475569" />
             </Pressable>
 
-            {isMenuOpen && (
+            {resolvedIsMenuOpen && (
               <View style={styles.menuPanel}>
                 {canManage ? (
                   <>
                     <Pressable
                       style={styles.menuAction}
                       onPress={() => {
-                        setIsMenuOpen(false);
+                        closeMenu();
                         onEdit?.(expense);
                       }}>
                       <Text style={styles.menuActionText}>Edit</Text>
@@ -108,7 +134,7 @@ export function ExpenseItemCard({
                     <Pressable
                       style={[styles.menuAction, styles.menuActionDanger]}
                       onPress={() => {
-                        setIsMenuOpen(false);
+                        closeMenu();
                         onDelete?.(expense);
                       }}>
                       <Text style={[styles.menuActionText, styles.menuActionDangerText]}>Delete</Text>

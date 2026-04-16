@@ -21,6 +21,14 @@ const formatMoney = (value: number) =>
   }).format(value);
 
 export function RecentGiveTakeCard({ records }: RecentGiveTakeCardProps) {
+  if (!records.length) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.emptyText}>No give/take records yet.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.card}>
       {records.map((record, index) => {
@@ -103,5 +111,12 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#6B7280',
+    paddingVertical: 14,
+    fontWeight: '600',
   },
 });

@@ -1,16 +1,17 @@
+import { addGiveTakeEntry } from '@/services/give-take-service';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,7 +49,7 @@ export default function AddLiabilityScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const parsedAmount = Number(amount.replace(/,/g, ''));
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setSubmitError('Please enter a valid amount before saving.');
@@ -71,11 +72,9 @@ export default function AddLiabilityScreen() {
     };
 
     setSubmitError(null);
+    await addGiveTakeEntry(payload);
     router.replace({
       pathname: '/(tabs)/give',
-      params: {
-        newLiability: encodeURIComponent(JSON.stringify(payload)),
-      },
     });
   };
 
@@ -83,7 +82,7 @@ export default function AddLiabilityScreen() {
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.headerRow}>
           <Pressable style={styles.closeButton} onPress={() => router.back()}>
             <Ionicons name="close" size={22} color="#0F172A" />
@@ -219,6 +218,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    paddingBottom: 120,
     gap: 16,
   },
   fieldGroup: {

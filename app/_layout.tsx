@@ -1,8 +1,27 @@
+import { registerExpenseSyncBackgroundTask } from '@/services/background-sync-service';
+import { processExpenseSyncQueue } from '@/services/expense-sync-service';
+import { subscribeNetworkChange } from '@/services/network-service';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 export default function RootLayout() {
+  useEffect(() => {
+    void registerExpenseSyncBackgroundTask();
+    void processExpenseSyncQueue();
+
+    const unsubscribe = subscribeNetworkChange((online) => {
+      if (online) {
+        void processExpenseSyncQueue();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   return (
     <>
       <Stack>

@@ -1,8 +1,15 @@
 import { ExpenseItem, ExpenseItemCard } from '@/components/expense/expense-item-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  addGiveTakeEntry,
+  deleteGiveTakeEntry,
+  getGiveTakeEntries,
+  updateGiveTakeEntry,
+} from '@/services/give-take-service';
+import type { LiabilityEntry } from '@/services/models';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -17,25 +24,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type LedgerType = 'i-gave' | 'i-owe';
 
-type LiabilityEntry = {
-  id: string;
-  person: string;
-  amount: number;
-  type: LedgerType;
-  dateLabel: string;
-  note?: string;
-  createdAt: string;
-};
-
-const today = new Date();
-
-const formatDateLabel = (value: Date) =>
-  value.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
-
 const formatMoney = (value: number) =>
   new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -43,37 +31,32 @@ const formatMoney = (value: number) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const initialEntries: LiabilityEntry[] = [
-  {
-    id: 'l-1',
-    person: 'Nimal Perera',
-    amount: 5000,
-    type: 'i-gave',
-    dateLabel: formatDateLabel(today),
-    note: 'Emergency cash',
-    createdAt: today.toISOString(),
-  },
-  {
-    id: 'l-2',
-    person: 'Book Store',
-    amount: 2450,
-    type: 'i-owe',
-    dateLabel: 'Apr 11, 2026',
-    note: 'Reference books',
-    createdAt: '2026-04-11T06:20:00.000Z',
-  },
-];
-
 export default function GiveTabScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ newLiability?: string }>();
   const handledPayload = useRef<string | null>(null);
-  const [entries, setEntries] = useState(initialEntries);
+  const [entries, setEntries] = useState<LiabilityEntry[]>([]);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<LiabilityEntry | null>(null);
   const [editPerson, setEditPerson] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editType, setEditType] = useState<LedgerType>('i-gave');
   const [editNote, setEditNote] = useState('');
+
+  const loadEntries = useCallback(async () => {
+    const storedEntries = await getGiveTakeEntries();
+    setEntries(storedEntries);
+  }, []);
+
+  useEffect(() => {
+    void loadEntries();
+  }, [loadEntries]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadEntries();
+    }, [loadEntries])
+  );
 
   const isEditValid = useMemo(() => {
     const parsedAmount = Number(editAmount.replace(/,/g, ''));
@@ -81,19 +64,22 @@ export default function GiveTabScreen() {
   }, [editAmount, editPerson]);
 
   const handleDeleteRecord = (entry: LiabilityEntry) => {
+    setOpenActionMenuId(null);
     Alert.alert('Remove this record?', 'Use this when the give/take is settled.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
           setEntries((prev) => prev.filter((item) => item.id !== entry.id));
+          await deleteGiveTakeEntry(entry.id);
         },
       },
     ]);
   };
 
   const handleOpenEdit = (entry: LiabilityEntry) => {
+    setOpenActionMenuId(null);
     setEditingEntry(entry);
     setEditPerson(entry.person);
     setEditAmount(String(entry.amount));
@@ -101,7 +87,7 @@ export default function GiveTabScreen() {
     setEditNote(entry.note ?? '');
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingEntry) {
       return;
     }
@@ -111,8 +97,7 @@ export default function GiveTabScreen() {
       return;
     }
 
-    setEntries((prev) =>
-      prev.map((entry) =>
+    const nextEntries = entries.map((entry) =>
         entry.id === editingEntry.id
           ? {
               ...entry,
@@ -122,8 +107,13 @@ export default function GiveTabScreen() {
               note: editNote.trim() || undefined,
             }
           : entry
-      )
-    );
+      );
+
+    setEntries(nextEntries);
+    const updated = nextEntries.find((entry) => entry.id === editingEntry.id);
+    if (updated) {
+      await updateGiveTakeEntry(updated);
+    }
 
     setEditingEntry(null);
   };
@@ -145,11 +135,13 @@ export default function GiveTabScreen() {
         }
         return [parsedEntry, ...prev];
       });
+      void addGiveTakeEntry(parsedEntry);
+      void loadEntries();
       handledPayload.current = payloadParam;
     } catch {
       handledPayload.current = payloadParam;
     }
-  }, [params.newLiability]);
+  }, [loadEntries, params.newLiability]);
 
   const totals = useMemo(() => {
     let receivable = 0;
@@ -175,6 +167,7 @@ export default function GiveTabScreen() {
           id: entry.id,
           merchant: entry.person,
           amount: entry.amount,
+          amountPrefix: isReceivable ? '+' : '-',
           category: isReceivable ? 'Receivable' : 'Payable',
           time: entry.dateLabel,
           note: entry.note,
@@ -205,14 +198,25 @@ export default function GiveTabScreen() {
     handleDeleteRecord(target);
   };
 
+  const handleToggleActionMenu = (record: ExpenseItem) => {
+    setOpenActionMenuId((prev) => (prev === record.id ? null : record.id));
+  };
+
+  const handleCloseActionMenu = () => {
+    setOpenActionMenuId(null);
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         <Reveal delay={30}>
           <Text style={styles.pageTitle}>Give / Take</Text>
         </Reveal>
 
-        <Reveal delay={90}>
+        <Reveal delay={260}>
           <View style={styles.summaryRow}>
             <View style={[styles.summaryCard, styles.receivableCard]}>
               <Text style={styles.summaryLabel}>Others Owe Me</Text>
@@ -238,20 +242,33 @@ export default function GiveTabScreen() {
           <Text style={styles.sectionTitle}>Recent Records</Text>
         </Reveal>
 
-        <Reveal delay={240}>
-          <View style={styles.groupCard}>
-            {expenseLikeRecords.map((record, index) => (
-              <ExpenseItemCard
-                key={record.id}
-                expense={record}
-                showDivider={index < expenseLikeRecords.length - 1}
-                showActions
-                onEdit={handleEditFromCard}
-                onDelete={handleDeleteFromCard}
-              />
-            ))}
-          </View>
-        </Reveal>
+        {entries.length === 0 ? (
+          <Reveal delay={240}>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No give/take records yet. Tap + to add one.</Text>
+            </View>
+          </Reveal>
+        ) : null}
+
+        {entries.length > 0 ? (
+          <Reveal delay={240}>
+            <View style={styles.groupCard}>
+              {expenseLikeRecords.map((record, index) => (
+                <ExpenseItemCard
+                  key={record.id}
+                  expense={record}
+                  showDivider={index < expenseLikeRecords.length - 1}
+                  showActions
+                  isMenuOpen={openActionMenuId === record.id}
+                  onToggleMenu={handleToggleActionMenu}
+                  onCloseMenu={handleCloseActionMenu}
+                  onEdit={handleEditFromCard}
+                  onDelete={handleDeleteFromCard}
+                />
+              ))}
+            </View>
+          </Reveal>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -431,6 +448,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   modalBackdrop: {
     flex: 1,

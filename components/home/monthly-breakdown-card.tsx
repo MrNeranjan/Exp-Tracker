@@ -20,6 +20,14 @@ const formatMoney = (value: number) =>
   }).format(value);
 
 export function MonthlyBreakdownCard({ categories }: MonthlyBreakdownCardProps) {
+  if (!categories.length) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.emptyText}>No expense data yet.</Text>
+      </View>
+    );
+  }
+
   const pieData = categories.map((item) => ({
     value: item.percent,
     color: item.color,
@@ -27,37 +35,34 @@ export function MonthlyBreakdownCard({ categories }: MonthlyBreakdownCardProps) 
 
   return (
     <View style={styles.card}>
-      <View style={styles.breakdownRow}>
-        <View style={styles.chartWrap}>
-          <PieChart
-            data={pieData}
-            donut
-            radius={80}
-            innerRadius={42}
-            innerCircleColor="#FFFFFF"
-            strokeColor="#FFFFFF"
-            strokeWidth={2}
-            showValuesAsLabels
-            textSize={11}
-            textColor="#FFFFFF"
-            centerLabelComponent={() => <Text style={styles.centerLabel}>Type</Text>}
-          />
-        </View>
+      <View style={styles.chartWrap}>
+        <PieChart
+          data={pieData}
+          donut
+          radius={80}
+          innerRadius={42}
+          innerCircleColor="#FFFFFF"
+          strokeColor="#FFFFFF"
+          strokeWidth={2}
+          showValuesAsLabels
+          textSize={11}
+          textColor="#FFFFFF"
+          centerLabelComponent={() => <Text style={styles.centerLabel}>Type</Text>}
+        />
+      </View>
 
-        <View style={styles.legendWrap}>
-          <Text style={styles.legendTitle}>Type</Text>
-          {categories.map((item) => (
-            <View key={item.label} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <View style={styles.legendTextWrap}>
-                <Text style={styles.legendLabel}>{item.label}</Text>
-                <Text style={styles.legendMeta}>
-                  {item.percent}% - {formatMoney(item.amount)}
-                </Text>
-              </View>
+      <View style={styles.legendGrid}>
+        {categories.map((item) => (
+          <View key={item.label} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+            <View style={styles.legendTextWrap}>
+              <Text style={styles.legendLabel}>{item.label}</Text>
+              <Text style={styles.legendMeta}>
+                {item.percent}% - {formatMoney(item.amount)}
+              </Text>
             </View>
-          ))}
-        </View>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -74,34 +79,32 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  breakdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   chartWrap: {
-    width: '58%',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   centerLabel: {
     fontSize: 20,
     color: '#1F2937',
     fontWeight: '700',
   },
-  legendWrap: {
-    width: '42%',
-    paddingLeft: 8,
+  legendGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   legendTitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#111827',
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   legendItem: {
+    width: '50%',
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 6,
+    paddingRight: 8,
   },
   legendDot: {
     width: 9,
@@ -121,5 +124,12 @@ const styles = StyleSheet.create({
   legendMeta: {
     fontSize: 11,
     color: '#4B5563',
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#6B7280',
+    paddingVertical: 14,
+    fontWeight: '600',
   },
 });

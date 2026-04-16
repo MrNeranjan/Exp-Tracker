@@ -1,55 +1,94 @@
-import type { ExpenseItem } from '@/components/expense/expense-item-card';
 import { MonthlyBreakdownCard, type CategoryBreakdown } from '@/components/home/monthly-breakdown-card';
 import { MonthlySummaryCard } from '@/components/home/monthly-summary-card';
 import { RecentGiveTakeCard, type GiveTakeRecord } from '@/components/home/recent-give-take-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { getExpenses } from '@/services/expense-service';
+import { getGiveTakeEntries } from '@/services/give-take-service';
+import { getSettings } from '@/services/settings-service';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const monthlyBudget = 3500;
-const totalSpent = 2845.6;
-const categoryData: CategoryBreakdown[] = [
-  { label: 'Food & Dining', percent: 35, amount: 1651, color: '#4C8ED9' },
-  { label: 'Rent & Utilities', percent: 25, amount: 711, color: '#4FA767' },
-  { label: 'Transport', percent: 12, amount: 427, color: '#F39B2E' },
-  { label: 'Shopping', percent: 12, amount: 241, color: '#E0A11B' },
-  { label: 'Entertainment', percent: 10, amount: 288, color: '#E36742' },
-  { label: 'Others', percent: 6, amount: 142, color: '#8A96AC' },
-];
+const colorForIndex = (index: number) => {
+  // Golden-angle hues prevent near-duplicates while scaling to many categories.
+  const hue = (index * 137.508) % 360;
+  return `hsl(${hue}, 68%, 50%)`;
+};
 
-const recentGiveTakeRecords: GiveTakeRecord[] = [
-  {
-    id: '1',
-    person: 'Nimal Perera',
-    amount: 5000,
-    type: 'receivable',
-    dateLabel: 'Apr 16, 2026',
-  },
-  {
-    id: '2',
-    person: 'Book Store',
-    amount: 2450,
-    type: 'payable',
-    dateLabel: 'Apr 11, 2026',
-  },
-  {
-    id: '3',
-    person: 'Kasun Silva',
-    amount: 1200,
-    type: 'receivable',
-    dateLabel: 'Apr 10, 2026',
-  },
-];
+const toExpenseDate = (createdAt?: string) => {
+  if (!createdAt) {
+    return new Date();
+  }
+
+  const parsed = new Date(createdAt);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
 
 export default function HomeTabScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ newExpense?: string }>();
   const handledPayload = useRef<string | null>(null);
 
-  const [totalSpentValue, setTotalSpentValue] = useState(totalSpent);
+  const [monthlyBudget, setMonthlyBudget] = useState(0);
+  const [totalSpentValue, setTotalSpentValue] = useState(0);
+  const [categoryData, setCategoryData] = useState<CategoryBreakdown[]>([]);
+  const [recentGiveTakeRecords, setRecentGiveTakeRecords] = useState<GiveTakeRecord[]>([]);
+
+  const hydrateDashboard = useCallback(async () => {
+    const [expenses, settings, giveTake] = await Promise.all([
+      getExpenses(),
+      getSettings(),
+      getGiveTakeEntries(),
+    ]);
+
+    const now = new Date();
+    const currentMonthExpenses = expenses.filter((item) => {
+      const date = toExpenseDate(item.createdAt);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    });
+
+    setMonthlyBudget(settings.monthlyBudget || 0);
+    setTotalSpentValue(currentMonthExpenses.reduce((sum, item) => sum + item.amount, 0));
+
+    const amountsByCategory = currentMonthExpenses.reduce<Record<string, number>>((acc, item) => {
+      acc[item.category] = (acc[item.category] ?? 0) + item.amount;
+      return acc;
+    }, {});
+
+    const total = currentMonthExpenses.reduce((sum, item) => sum + item.amount, 0);
+    const categories = Object.entries(amountsByCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, amount], index) => ({
+        label,
+        amount,
+        percent: total > 0 ? Math.round((amount / total) * 100) : 0,
+        color: colorForIndex(index),
+      }));
+
+    setCategoryData(categories);
+
+    const records: GiveTakeRecord[] = giveTake.slice(0, 6).map((entry) => ({
+      id: entry.id,
+      person: entry.person,
+      amount: entry.amount,
+      type: entry.type === 'i-gave' ? 'receivable' : 'payable',
+      dateLabel: entry.dateLabel,
+    }));
+
+    setRecentGiveTakeRecords(records);
+  }, []);
+
+  useEffect(() => {
+    void hydrateDashboard();
+  }, [hydrateDashboard]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void hydrateDashboard();
+    }, [hydrateDashboard])
+  );
 
   useEffect(() => {
     const payloadParam = Array.isArray(params.newExpense) ? params.newExpense[0] : params.newExpense;
@@ -58,14 +97,9 @@ export default function HomeTabScreen() {
       return;
     }
 
-    try {
-      const parsedExpense = JSON.parse(decodeURIComponent(payloadParam)) as ExpenseItem;
-      setTotalSpentValue((prev) => prev + parsedExpense.amount);
-      handledPayload.current = payloadParam;
-    } catch {
-      handledPayload.current = payloadParam;
-    }
-  }, [params.newExpense]);
+    void hydrateDashboard();
+    handledPayload.current = payloadParam;
+  }, [hydrateDashboard, params.newExpense]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>

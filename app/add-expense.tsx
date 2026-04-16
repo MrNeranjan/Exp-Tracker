@@ -1,3 +1,6 @@
+import { addExpense } from '@/services/expense-service';
+import { enqueueExpenseSync, processExpenseSyncQueue } from '@/services/expense-sync-service';
+import { isNetworkAvailable } from '@/services/network-service';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
@@ -95,7 +98,7 @@ export default function AddExpenseScreen() {
     setShowAddCategoryInput(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const parsedAmount = Number(amount.replace(/,/g, ''));
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setSubmitError('Please enter a valid amount before saving.');
@@ -107,25 +110,29 @@ export default function AddExpenseScreen() {
       merchant: note.trim() || selectedCategory,
       amount: parsedAmount,
       category: selectedCategory,
+      note: note.trim() || undefined,
       time: formatExpenseTimestamp(date),
       createdAt: date.toISOString(),
       icon: 'receipt-outline' as const,
     };
 
+    await addExpense(payload);
+    await enqueueExpenseSync('create', payload);
+
+    const online = await isNetworkAvailable();
+    if (online) {
+      void processExpenseSyncQueue();
+    }
+
     setSubmitError(null);
-    router.replace({
-      pathname: '/(tabs)',
-      params: {
-        newExpense: encodeURIComponent(JSON.stringify(payload)),
-      },
-    });
+    router.back();
   };
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.headerRow}>
           <Pressable style={styles.closeButton} onPress={() => router.back()}>
             <Ionicons name="close" size={22} color="#0F172A" />
@@ -271,6 +278,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    paddingBottom: 120,
     gap: 16,
   },
   fieldGroup: {

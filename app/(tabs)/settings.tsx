@@ -1,12 +1,28 @@
 import { Reveal } from '@/components/ui/reveal';
+import { processExpenseSyncQueue } from '@/services/expense-sync-service';
+import { isNetworkAvailable } from '@/services/network-service';
+import { getSettings, saveSettings } from '@/services/settings-service';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SettingsTabScreen() {
-  const [sheetUrl, setSheetUrl] = useState('https://sheets.googleapis.com/v1/...');
-  const [budgetAmount, setBudgetAmount] = useState('3500.00');
+  const router = useRouter();
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [budgetAmount, setBudgetAmount] = useState('0.00');
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const settings = await getSettings();
+      setSheetUrl(settings.sheetUrl || '');
+      setBudgetAmount(settings.monthlyBudget.toFixed(2));
+    };
+
+    void loadSettings();
+  }, []);
 
   const handleBudgetChange = (value: string) => {
     // Keep typing fully responsive; sanitize only on blur.
@@ -34,9 +50,41 @@ export default function SettingsTabScreen() {
     setBudgetAmount(numericValue.toFixed(2));
   };
 
+  const handleSaveSettings = async () => {
+    if (isSavingBudget) {
+      return;
+    }
+
+    setIsSavingBudget(true);
+    const parsed = Number(budgetAmount.replace(/,/g, ''));
+
+    try {
+      await saveSettings({
+        sheetUrl: sheetUrl.trim(),
+        monthlyBudget: Number.isFinite(parsed) ? parsed : 0,
+      });
+
+      router.replace('/(tabs)');
+    } finally {
+      setIsSavingBudget(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    const online = await isNetworkAvailable();
+    if (!online) {
+      return;
+    }
+
+    await processExpenseSyncQueue();
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         <Reveal delay={30}>
           <Text style={styles.pageTitle}>Settings</Text>
         </Reveal>
@@ -56,7 +104,7 @@ export default function SettingsTabScreen() {
             autoCorrect={false}
           />
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Sync Google Sheet" onPress={() => {}}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Sync Google Sheet" onPress={handleSyncNow}>
             <LinearGradient
               colors={['#43A36F', '#3C9D67']}
               start={{ x: 0, y: 0.5 }}
@@ -94,13 +142,19 @@ export default function SettingsTabScreen() {
 
           <Text style={styles.helpText}>Update this amount to change your budget for the next month.</Text>
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Save Budget" onPress={() => {}}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Save Budget"
+            onPress={handleSaveSettings}
+            disabled={isSavingBudget}>
             <LinearGradient
-              colors={['#2D7BC8', '#286CB2']}
+              colors={isSavingBudget ? ['#93C5FD', '#7FB3EA'] : ['#2D7BC8', '#286CB2']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={styles.secondaryButton}>
-              <Text style={styles.primaryButtonText}>Save Budget</Text>
+              <Text style={styles.primaryButtonText}>
+                {isSavingBudget ? 'Saving...' : 'Save Budget'}
+              </Text>
             </LinearGradient>
           </Pressable>
           </View>

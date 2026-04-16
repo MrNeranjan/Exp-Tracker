@@ -1,8 +1,11 @@
 import { ExpenseItem, ExpenseItemCard } from '@/components/expense/expense-item-card';
 import { FloatingAddButton } from '@/components/ui/floating-add-button';
 import { Reveal } from '@/components/ui/reveal';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { deleteExpense, getExpenses, saveExpenses, updateExpense } from '@/services/expense-service';
+import { enqueueExpenseSync, processExpenseSyncQueue } from '@/services/expense-sync-service';
+import { isNetworkAvailable } from '@/services/network-service';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,142 +14,107 @@ type ExpenseGroup = {
   entries: ExpenseItem[];
 };
 
-const today = new Date();
-const todayAt = (hours: number, minutes: number) => {
-  const value = new Date(today);
-  value.setHours(hours, minutes, 0, 0);
-  return value;
+const toValidDate = (dateValue?: string) => {
+  if (!dateValue) {
+    return new Date();
+  }
+
+  const parsed = new Date(dateValue);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
-const formatTimeFromDate = (date: Date) => {
-  const datePart = date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-  });
-  const timePart = date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
-  return `${datePart}, ${timePart}`;
+const isCurrentMonthExpense = (expense: ExpenseItem) => {
+  const expenseDate = toValidDate(expense.createdAt);
+  const now = new Date();
+  return expenseDate.getFullYear() === now.getFullYear() && expenseDate.getMonth() === now.getMonth();
 };
 
-const expenseGroups: ExpenseGroup[] = [
-  {
-    monthLabel: 'October 2023',
-    entries: [
-      {
-        id: 'oct-1',
-        merchant: 'Whole Foods Market',
-        amount: 145.3,
-        category: 'Food',
-        time: formatTimeFromDate(todayAt(16, 15)),
-        createdAt: todayAt(16, 15).toISOString(),
-        icon: 'cart',
-      },
-      {
-        id: 'oct-2',
-        merchant: 'Uber Ride',
-        amount: 24.5,
-        category: 'Food',
-        time: 'Apr 16, 4:15 AM',
-        createdAt: '2023-10-25T04:15:00.000Z',
-        icon: 'car',
-      },
-      {
-        id: 'oct-3',
-        merchant: 'Shell Gas Station',
-        amount: 20,
-        category: 'Food',
-        time: 'Oct 25, 4:15 PM',
-        createdAt: '2023-10-25T16:15:00.000Z',
-        icon: 'flame',
-      },
-      {
-        id: 'oct-4',
-        merchant: 'Amazon.com',
-        amount: 65.2,
-        category: 'Shopping',
-        time: 'Oct 24, 10:00 AM',
-        createdAt: '2023-10-24T10:00:00.000Z',
-        icon: 'bag-handle',
-        iconColor: '#E39A2D',
-        categoryColor: '#8A7723',
-      },
-      {
-        id: 'oct-5',
-        merchant: 'Rent Payment',
-        amount: 1600,
-        category: 'Rent & Utilities',
-        time: 'Oct 01, 1:00 AM',
-        createdAt: '2023-10-01T01:00:00.000Z',
-        icon: 'home',
-        iconColor: '#4FA767',
-        categoryColor: '#4FA767',
-      },
-    ],
-  },
-  {
-    monthLabel: 'September 2023',
-    entries: [
-      {
-        id: 'sep-1',
-        merchant: 'Local Cafe',
-        amount: 12.5,
-        category: 'Food & Dining',
-        time: 'Sep 25, 12:00 PM',
-        createdAt: '2023-09-25T12:00:00.000Z',
-        icon: 'cafe',
-        iconColor: '#4C8ED9',
-        categoryColor: '#3F6D81',
-      },
-      {
-        id: 'sep-2',
-        merchant: 'Netflix',
-        amount: 19.99,
-        category: 'Entertainment',
-        time: 'Sep 20, 4:15 AM',
-        createdAt: '2023-09-20T04:15:00.000Z',
-        icon: 'tv',
-        iconColor: '#8E3B3B',
-        categoryColor: '#6E3B3B',
-      },
-      {
-        id: 'sep-3',
-        merchant: 'Public Transport Pass',
-        amount: 110,
-        category: 'Transport',
-        time: 'Sep 15, 8:00 AM',
-        createdAt: '2023-09-15T08:00:00.000Z',
-        icon: 'bus',
-        iconColor: '#A08D2F',
-        categoryColor: '#8A7723',
-      },
-      {
-        id: 'sep-4',
-        merchant: 'Home Depot',
-        amount: 45.3,
-        category: 'Others',
-        time: 'Sep 10, 2:00 PM',
-        createdAt: '2023-09-10T14:00:00.000Z',
-        icon: 'hammer',
-      },
-    ],
-  },
-];
+const buildExpenseGroups = (expenses: ExpenseItem[]): ExpenseGroup[] => {
+  const grouped = new Map<string, ExpenseItem[]>();
+
+  for (const expense of expenses) {
+    const expenseDate = toValidDate(expense.createdAt);
+    const monthKey = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`;
+    const existing = grouped.get(monthKey) ?? [];
+    existing.push(expense);
+    grouped.set(monthKey, existing);
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([monthKey, entries]) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      const monthDate = new Date(year, month - 1, 1);
+
+      return {
+        monthLabel: monthDate.toLocaleDateString('en-US', {
+          month: 'long',
+          year: 'numeric',
+        }),
+        entries: [...entries].sort(
+          (a, b) => toValidDate(b.createdAt).getTime() - toValidDate(a.createdAt).getTime()
+        ),
+      };
+    });
+};
 
 export default function ExpensesTabScreen() {
   const router = useRouter();
-  const [groups, setGroups] = useState(expenseGroups);
+  const [groups, setGroups] = useState<ExpenseGroup[]>([]);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editMerchant, setEditMerchant] = useState('');
   const [editCategory, setEditCategory] = useState('');
 
+  const loadExpenses = useCallback(async () => {
+    const storedExpenses = await getExpenses();
+    setGroups(buildExpenseGroups(storedExpenses));
+  }, []);
+
+  useEffect(() => {
+    void loadExpenses();
+  }, [loadExpenses]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadExpenses();
+    }, [loadExpenses])
+  );
+
   const isEditValid = useMemo(() => {
     const parsedAmount = Number(editAmount.replace(/,/g, ''));
     return Number.isFinite(parsedAmount) && parsedAmount > 0 && editCategory.trim().length > 0;
   }, [editAmount, editCategory]);
+
+  const categoryOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(groups.flatMap((group) => group.entries.map((entry) => entry.category.trim())))
+    ).filter((value) => value.length > 0);
+
+    return ['All', ...categories.sort((a, b) => a.localeCompare(b))];
+  }, [groups]);
+
+  const filteredGroups = useMemo(() => {
+    if (selectedCategory === 'All') {
+      return groups;
+    }
+
+    return groups
+      .map((group) => ({
+        ...group,
+        entries: group.entries.filter((entry) => entry.category === selectedCategory),
+      }))
+      .filter((group) => group.entries.length > 0);
+  }, [groups, selectedCategory]);
+
+  useEffect(() => {
+    if (!categoryOptions.includes(selectedCategory)) {
+      setSelectedCategory('All');
+    }
+  }, [categoryOptions, selectedCategory]);
 
   const applyToExpense = (id: string, updater: (entry: ExpenseItem) => ExpenseItem | null) => {
     setGroups((prev) =>
@@ -161,27 +129,44 @@ export default function ExpensesTabScreen() {
     );
   };
 
+  const handleToggleActionMenu = (expense: ExpenseItem) => {
+    setOpenActionMenuId((prev) => (prev === expense.id ? null : expense.id));
+  };
+
+  const handleCloseActionMenu = () => {
+    setOpenActionMenuId(null);
+  };
+
   const handleDelete = (expense: ExpenseItem) => {
+    setOpenActionMenuId(null);
     Alert.alert('Delete expense?', 'This will remove the expense from the list.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
           applyToExpense(expense.id, () => null);
+          await deleteExpense(expense.id);
+          await enqueueExpenseSync('delete', expense);
+
+          const online = await isNetworkAvailable();
+          if (online) {
+            void processExpenseSyncQueue();
+          }
         },
       },
     ]);
   };
 
   const handleOpenEdit = (expense: ExpenseItem) => {
+    setOpenActionMenuId(null);
     setEditingExpense(expense);
     setEditAmount(String(expense.amount));
     setEditMerchant(expense.merchant);
     setEditCategory(expense.category);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingExpense) {
       return;
     }
@@ -191,24 +176,122 @@ export default function ExpensesTabScreen() {
       return;
     }
 
-    applyToExpense(editingExpense.id, (entry) => ({
-      ...entry,
+    const updatedExpense = {
+      ...editingExpense,
       amount: parsedAmount,
       merchant: editMerchant.trim() || editCategory.trim(),
       category: editCategory.trim(),
-    }));
+    };
+
+    applyToExpense(editingExpense.id, () => updatedExpense);
+    await updateExpense(updatedExpense);
+    await enqueueExpenseSync('update', updatedExpense, editingExpense);
+
+    const online = await isNetworkAvailable();
+    if (online) {
+      void processExpenseSyncQueue();
+    }
 
     setEditingExpense(null);
   };
 
+  const handleClearPastRecords = () => {
+    const allEntries = groups.flatMap((group) => group.entries);
+    const currentMonthEntries = allEntries.filter((entry) => isCurrentMonthExpense(entry));
+    const hasPastRecords = allEntries.length > currentMonthEntries.length;
+
+    if (!hasPastRecords) {
+      Alert.alert('Nothing to clear', 'There are no past-month expense records to remove.');
+      return;
+    }
+
+    Alert.alert(
+      'Clear past records?',
+      'This removes only previous-month expenses from local storage and keeps current month records.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear Past',
+          style: 'destructive',
+          onPress: async () => {
+            await saveExpenses(currentMonthEntries);
+            setGroups(buildExpenseGroups(currentMonthEntries));
+            setOpenActionMenuId(null);
+            setIsCategoryMenuOpen(false);
+            setSelectedCategory('All');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         <Reveal delay={30}>
           <Text style={styles.pageTitle}>Expenses</Text>
         </Reveal>
 
-        {groups.map((group, groupIndex) => (
+        {groups.length > 0 ? (
+          <Reveal delay={60}>
+            <View style={styles.filterBlock}>
+              <Text style={styles.filterLabel}>Category</Text>
+              <Pressable
+                style={styles.dropdownTrigger}
+                onPress={() => setIsCategoryMenuOpen((prev) => !prev)}>
+                <Text style={styles.dropdownValue}>{selectedCategory}</Text>
+                <Text style={styles.dropdownChevron}>{isCategoryMenuOpen ? '▲' : '▼'}</Text>
+              </Pressable>
+
+              {isCategoryMenuOpen ? (
+                <View style={styles.dropdownMenu}>
+                  {categoryOptions.map((category) => {
+                    const isActive = selectedCategory === category;
+
+                    return (
+                      <Pressable
+                        key={category}
+                        style={[styles.dropdownOption, isActive && styles.dropdownOptionActive]}
+                        onPress={() => {
+                          setSelectedCategory(category);
+                          setIsCategoryMenuOpen(false);
+                        }}>
+                        <Text style={[styles.dropdownOptionText, isActive && styles.dropdownOptionTextActive]}>
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <Pressable style={styles.clearPastButton} onPress={handleClearPastRecords}>
+                <Text style={styles.clearPastButtonText}>Clear Past Records (Keep Current Month)</Text>
+              </Pressable>
+            </View>
+          </Reveal>
+        ) : null}
+
+        {groups.length === 0 ? (
+          <Reveal delay={90}>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No expenses yet. Tap + to add your first record.</Text>
+            </View>
+          </Reveal>
+        ) : null}
+
+        {groups.length > 0 && filteredGroups.length === 0 ? (
+          <Reveal delay={90}>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No expenses found for {selectedCategory}.</Text>
+            </View>
+          </Reveal>
+        ) : null}
+
+        {filteredGroups.map((group, groupIndex) => (
           <Reveal key={group.monthLabel} delay={90 + groupIndex * 90}>
             <Text style={styles.groupTitle}>{group.monthLabel}</Text>
             <View style={styles.groupCard}>
@@ -219,6 +302,9 @@ export default function ExpensesTabScreen() {
                   showDivider={index < group.entries.length - 1}
                   showActions
                   enforceSameDayActions
+                  isMenuOpen={openActionMenuId === expense.id}
+                  onToggleMenu={handleToggleActionMenu}
+                  onCloseMenu={handleCloseActionMenu}
                   onEdit={handleOpenEdit}
                   onDelete={handleDelete}
                 />
@@ -302,6 +388,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
+  filterBlock: {
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  filterLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#475569',
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  dropdownTrigger: {
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  dropdownValue: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  dropdownChevron: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  dropdownMenu: {
+    marginTop: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  dropdownOption: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  dropdownOptionActive: {
+    backgroundColor: '#DBEAFE',
+  },
+  dropdownOptionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  dropdownOptionTextActive: {
+    color: '#1D4ED8',
+  },
+  clearPastButton: {
+    marginTop: 10,
+    minHeight: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  clearPastButtonText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#B91C1C',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   groupTitle: {
     marginTop: 6,
     marginBottom: 6,
@@ -320,6 +485,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   modalBackdrop: {
     flex: 1,
