@@ -6,14 +6,14 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,9 +21,9 @@ const baseCategories = [
   'Food & Dining',
   'Groceries',
   'Housing / Rent',
-  'Utilities (Electricity, Water, Gas, ...)',
-  'Telecommunications (Mobile, Internet, ...)',
-  'Transportation (Fuel, Taxi, Public Transit, ...)',
+  'Utilities',
+  'Telecommunications',
+  'Transportation',
   'Health / Medical',
   'Education',
   'Personal Care',
@@ -35,7 +35,7 @@ const baseCategories = [
   'Savings / Investments',
   'Gifts / Donations',
   'Travel',
-  'Subscriptions (Netflix, Spotify, Software, ...)',
+  'Subscriptions',
   'Taxes / Fees',
   'Emergency',
 ];

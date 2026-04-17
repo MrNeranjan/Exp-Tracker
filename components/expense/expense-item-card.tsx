@@ -67,9 +67,8 @@ export function ExpenseItemCard({
 }: ExpenseItemCardProps) {
   const [localIsMenuOpen, setLocalIsMenuOpen] = useState(false);
   const resolvedIsMenuOpen = isMenuOpen ?? localIsMenuOpen;
-  const canManage = !enforceSameDayActions || isSameLocalDay(expense.createdAt);
-  const noteText = expense.note?.trim();
-  const shouldShowNote = Boolean(noteText) && noteText !== expense.merchant.trim();
+  const canEdit = !enforceSameDayActions || isSameLocalDay(expense.createdAt);
+  const titleText = expense.note?.trim() || expense.merchant;
 
   const toggleMenu = () => {
     if (onToggleMenu) {
@@ -98,10 +97,11 @@ export function ExpenseItemCard({
           color={expense.iconColor ?? '#111827'}
           style={styles.expenseIcon}
         />
-        <View>
-          <Text style={styles.expenseMerchant}>{expense.merchant}</Text>
+        <View style={styles.expenseLeftTextWrap}>
+          <Text style={styles.expenseMerchant} numberOfLines={1} ellipsizeMode="tail">
+            {titleText}
+          </Text>
           <Text style={styles.expenseMeta}>{expense.time}</Text>
-          {shouldShowNote ? <Text style={styles.expenseNote}>{noteText}</Text> : null}
         </View>
       </View>
 
@@ -124,8 +124,8 @@ export function ExpenseItemCard({
 
             {resolvedIsMenuOpen && (
               <View style={styles.menuPanel}>
-                {canManage ? (
-                  <>
+                <>
+                  {canEdit ? (
                     <Pressable
                       style={styles.menuAction}
                       onPress={() => {
@@ -134,6 +134,10 @@ export function ExpenseItemCard({
                       }}>
                       <Text style={styles.menuActionText}>Edit</Text>
                     </Pressable>
+                  ) : (
+                    <Text style={styles.menuInfoText}>Edit available only on the same day.</Text>
+                  )}
+
                     <Pressable
                       style={[styles.menuAction, styles.menuActionDanger]}
                       onPress={() => {
@@ -142,10 +146,7 @@ export function ExpenseItemCard({
                       }}>
                       <Text style={[styles.menuActionText, styles.menuActionDangerText]}>Delete</Text>
                     </Pressable>
-                  </>
-                ) : (
-                  <Text style={styles.menuInfoText}>Edit/Delete available only on the same day.</Text>
-                )}
+                </>
               </View>
             )}
           </View>
@@ -170,6 +171,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 12,
+  },
+  expenseLeftTextWrap: {
+    flex: 1,
   },
   expenseIcon: {
     marginRight: 8,
@@ -186,7 +191,7 @@ const styles = StyleSheet.create({
   expenseRightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    flexShrink: 0,
     gap: 6,
   },
   expenseAmount: {
@@ -197,12 +202,6 @@ const styles = StyleSheet.create({
   expenseMeta: {
     fontSize: 12,
     color: '#6B7280',
-  },
-  expenseNote: {
-    fontSize: 12,
-    color: '#475569',
-    marginTop: 2,
-    maxWidth: 190,
   },
   actionsWrap: {
     position: 'relative',
