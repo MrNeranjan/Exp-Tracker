@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export type ExpenseItem = {
   id: string;
+  remoteId?: string;
   merchant: string;
   amount: number;
   amountPrefix?: '+' | '-';

@@ -1,11 +1,11 @@
 import { Reveal } from '@/components/ui/reveal';
-import { processExpenseSyncQueue } from '@/services/expense-sync-service';
+import { getExpenseSyncQueue, processExpenseSyncQueue } from '@/services/expense-sync-service';
 import { isNetworkAvailable } from '@/services/network-service';
 import { getSettings, saveSettings } from '@/services/settings-service';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SettingsTabScreen() {
@@ -13,6 +13,7 @@ export default function SettingsTabScreen() {
   const [sheetUrl, setSheetUrl] = useState('');
   const [budgetAmount, setBudgetAmount] = useState('0.00');
   const [isSavingBudget, setIsSavingBudget] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -71,12 +72,56 @@ export default function SettingsTabScreen() {
   };
 
   const handleSyncNow = async () => {
-    const online = await isNetworkAvailable();
-    if (!online) {
+    if (isSyncing) {
       return;
     }
 
-    await processExpenseSyncQueue();
+    const normalizedSheetUrl = sheetUrl.trim();
+    if (!normalizedSheetUrl) {
+      Alert.alert('Missing endpoint', 'Please enter your Sheet API endpoint URL first.');
+      return;
+    }
+
+    const online = await isNetworkAvailable();
+    if (!online) {
+      Alert.alert('No internet', 'Connect to the internet and try syncing again.');
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const parsed = Number(budgetAmount.replace(/,/g, ''));
+      await saveSettings({
+        sheetUrl: normalizedSheetUrl,
+        monthlyBudget: Number.isFinite(parsed) ? parsed : 0,
+      });
+
+      const pendingBefore = (await getExpenseSyncQueue()).length;
+      if (!pendingBefore) {
+        Alert.alert('Nothing to sync', 'There are no pending expense changes in the queue.');
+        return;
+      }
+
+      await processExpenseSyncQueue();
+
+      const pendingAfter = (await getExpenseSyncQueue()).length;
+      const syncedCount = pendingBefore - pendingAfter;
+
+      if (!pendingAfter) {
+        Alert.alert('Sync complete', `${syncedCount} expense change(s) synced successfully.`);
+      } else {
+        Alert.alert(
+          'Partial sync',
+          `${syncedCount} synced, ${pendingAfter} still pending. Please try again.`
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sync right now.';
+      Alert.alert('Sync failed', message);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -104,13 +149,17 @@ export default function SettingsTabScreen() {
             autoCorrect={false}
           />
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Sync Google Sheet" onPress={handleSyncNow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sync Google Sheet"
+            onPress={handleSyncNow}
+            disabled={isSyncing}>
             <LinearGradient
-              colors={['#43A36F', '#3C9D67']}
+              colors={isSyncing ? ['#86C9A3', '#7AC098'] : ['#43A36F', '#3C9D67']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Sync Google Sheet</Text>
+              <Text style={styles.primaryButtonText}>{isSyncing ? 'Syncing...' : 'Sync Google Sheet'}</Text>
             </LinearGradient>
           </Pressable>
           </View>
