@@ -14,6 +14,29 @@ type ExpenseGroup = {
   entries: ExpenseItem[];
 };
 
+const defaultExpenseCategories = [
+  'Food & Dining',
+  'Groceries',
+  'Housing / Rent',
+  'Utilities (Electricity, Water, Gas, ...)',
+  'Telecommunications (Mobile, Internet, ...)',
+  'Transportation (Fuel, Taxi, Public Transit, ...)',
+  'Health / Medical',
+  'Education',
+  'Personal Care',
+  'Shopping',
+  'Entertainment',
+  'Family / Kids',
+  'Insurance',
+  'Debt Repayment / Loans',
+  'Savings / Investments',
+  'Gifts / Donations',
+  'Travel',
+  'Subscriptions (Netflix, Spotify, Software, ...)',
+  'Taxes / Fees',
+  'Emergency',
+];
+
 const toValidDate = (dateValue?: string) => {
   if (!dateValue) {
     return new Date();
@@ -68,6 +91,7 @@ export default function ExpensesTabScreen() {
   const [editAmount, setEditAmount] = useState('');
   const [editMerchant, setEditMerchant] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [isEditCategoryMenuOpen, setIsEditCategoryMenuOpen] = useState(false);
 
   const loadExpenses = useCallback(async () => {
     const storedExpenses = await getExpenses();
@@ -91,11 +115,23 @@ export default function ExpensesTabScreen() {
 
   const categoryOptions = useMemo(() => {
     const categories = Array.from(
-      new Set(groups.flatMap((group) => group.entries.map((entry) => entry.category.trim())))
+      new Set([
+        ...defaultExpenseCategories,
+        ...groups.flatMap((group) => group.entries.map((entry) => entry.category.trim())),
+      ])
     ).filter((value) => value.length > 0);
 
     return ['All', ...categories.sort((a, b) => a.localeCompare(b))];
   }, [groups]);
+
+  const editCategoryOptions = useMemo(() => {
+    const base = categoryOptions.filter((category) => category !== 'All');
+    if (editCategory.trim().length > 0 && !base.includes(editCategory)) {
+      return [editCategory, ...base];
+    }
+
+    return base;
+  }, [categoryOptions, editCategory]);
 
   const filteredGroups = useMemo(() => {
     if (selectedCategory === 'All') {
@@ -164,6 +200,7 @@ export default function ExpensesTabScreen() {
     setEditAmount(String(expense.amount));
     setEditMerchant(expense.merchant);
     setEditCategory(expense.category);
+    setIsEditCategoryMenuOpen(false);
   };
 
   const handleSaveEdit = async () => {
@@ -192,6 +229,7 @@ export default function ExpensesTabScreen() {
       void processExpenseSyncQueue();
     }
 
+    setIsEditCategoryMenuOpen(false);
     setEditingExpense(null);
   };
 
@@ -248,23 +286,29 @@ export default function ExpensesTabScreen() {
 
               {isCategoryMenuOpen ? (
                 <View style={styles.dropdownMenu}>
-                  {categoryOptions.map((category) => {
-                    const isActive = selectedCategory === category;
+                  <ScrollView
+                    style={styles.dropdownScroll}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled">
+                    {categoryOptions.map((category) => {
+                      const isActive = selectedCategory === category;
 
-                    return (
-                      <Pressable
-                        key={category}
-                        style={[styles.dropdownOption, isActive && styles.dropdownOptionActive]}
-                        onPress={() => {
-                          setSelectedCategory(category);
-                          setIsCategoryMenuOpen(false);
-                        }}>
-                        <Text style={[styles.dropdownOptionText, isActive && styles.dropdownOptionTextActive]}>
-                          {category}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                      return (
+                        <Pressable
+                          key={category}
+                          style={[styles.dropdownOption, isActive && styles.dropdownOptionActive]}
+                          onPress={() => {
+                            setSelectedCategory(category);
+                            setIsCategoryMenuOpen(false);
+                          }}>
+                          <Text style={[styles.dropdownOptionText, isActive && styles.dropdownOptionTextActive]}>
+                            {category}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
               ) : null}
 
@@ -318,7 +362,10 @@ export default function ExpensesTabScreen() {
         visible={!!editingExpense}
         transparent
         animationType="fade"
-        onRequestClose={() => setEditingExpense(null)}>
+        onRequestClose={() => {
+          setIsEditCategoryMenuOpen(false);
+          setEditingExpense(null);
+        }}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit Expense</Text>
@@ -343,16 +390,47 @@ export default function ExpensesTabScreen() {
             />
 
             <Text style={styles.modalLabel}>Category</Text>
-            <TextInput
-              value={editCategory}
-              onChangeText={setEditCategory}
-              style={styles.modalInput}
-              placeholder="Category"
-              placeholderTextColor="#94A3B8"
-            />
+            <Pressable
+              style={styles.modalDropdownTrigger}
+              onPress={() => setIsEditCategoryMenuOpen((prev) => !prev)}>
+              <Text style={styles.modalDropdownValue}>{editCategory}</Text>
+              <Text style={styles.modalDropdownChevron}>{isEditCategoryMenuOpen ? '▲' : '▼'}</Text>
+            </Pressable>
+            {isEditCategoryMenuOpen ? (
+              <View style={styles.modalDropdownMenu}>
+                <ScrollView
+                  style={styles.modalDropdownScroll}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  keyboardShouldPersistTaps="handled">
+                  {editCategoryOptions.map((category) => {
+                    const isSelected = category === editCategory;
+
+                    return (
+                      <Pressable
+                        key={category}
+                        style={[styles.dropdownOption, isSelected && styles.dropdownOptionActive]}
+                        onPress={() => {
+                          setEditCategory(category);
+                          setIsEditCategoryMenuOpen(false);
+                        }}>
+                        <Text style={[styles.dropdownOptionText, isSelected && styles.dropdownOptionTextActive]}>
+                          {category}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
 
             <View style={styles.modalActionsRow}>
-              <Pressable style={styles.modalCancelButton} onPress={() => setEditingExpense(null)}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setIsEditCategoryMenuOpen(false);
+                  setEditingExpense(null);
+                }}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
               <Pressable
@@ -429,6 +507,9 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+  },
+  dropdownScroll: {
+    maxHeight: 220,
   },
   dropdownOption: {
     minHeight: 40,
@@ -533,6 +614,37 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 15,
     backgroundColor: '#FFFFFF',
+  },
+  modalDropdownTrigger: {
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalDropdownValue: {
+    flex: 1,
+    color: '#0F172A',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalDropdownChevron: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  modalDropdownMenu: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  modalDropdownScroll: {
+    maxHeight: 220,
   },
   modalActionsRow: {
     marginTop: 8,

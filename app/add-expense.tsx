@@ -6,31 +6,38 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const baseCategories = [
   'Food & Dining',
-  'Housing & Utilities',
-  'Transportation',
-  'Tech & Development',
-  'Education & Academic',
-  'Health & Wellness',
-  'Family & Support',
-  'Entertainment',
-  'Shopping',
+  'Groceries',
+  'Housing / Rent',
+  'Utilities (Electricity, Water, Gas, ...)',
+  'Telecommunications (Mobile, Internet, ...)',
+  'Transportation (Fuel, Taxi, Public Transit, ...)',
+  'Health / Medical',
+  'Education',
   'Personal Care',
-  'Gifts & Donations',
-  'Debt & Savings',
-  'Others',
+  'Shopping',
+  'Entertainment',
+  'Family / Kids',
+  'Insurance',
+  'Debt Repayment / Loans',
+  'Savings / Investments',
+  'Gifts / Donations',
+  'Travel',
+  'Subscriptions (Netflix, Spotify, Software, ...)',
+  'Taxes / Fees',
+  'Emergency',
 ];
 
 const formatDateLabel = (value: Date) =>
@@ -107,7 +114,7 @@ export default function AddExpenseScreen() {
 
     const payload = {
       id: `custom-${Date.now()}`,
-      merchant: note.trim() || selectedCategory,
+      merchant: selectedCategory,
       amount: parsedAmount,
       category: selectedCategory,
       note: note.trim() || undefined,

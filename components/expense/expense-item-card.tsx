@@ -68,6 +68,8 @@ export function ExpenseItemCard({
   const [localIsMenuOpen, setLocalIsMenuOpen] = useState(false);
   const resolvedIsMenuOpen = isMenuOpen ?? localIsMenuOpen;
   const canManage = !enforceSameDayActions || isSameLocalDay(expense.createdAt);
+  const noteText = expense.note?.trim();
+  const shouldShowNote = Boolean(noteText) && noteText !== expense.merchant.trim();
 
   const toggleMenu = () => {
     if (onToggleMenu) {
@@ -99,7 +101,7 @@ export function ExpenseItemCard({
         <View>
           <Text style={styles.expenseMerchant}>{expense.merchant}</Text>
           <Text style={styles.expenseMeta}>{expense.time}</Text>
-          {expense.note ? <Text style={styles.expenseNote}>{expense.note}</Text> : null}
+          {shouldShowNote ? <Text style={styles.expenseNote}>{noteText}</Text> : null}
         </View>
       </View>
 
